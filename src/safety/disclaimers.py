@@ -12,9 +12,10 @@ It is **not** a substitute for professional mental health care, diagnosis, or tr
 """
 
 PRIVACY_NOTICE = """
-Your mood logs, journal entries, and chat history are stored locally in a SQLite database
-on this device. No data is sent to external servers except anonymized prompts to the AI
-provider for generating insights and responses. Journal content is never written to logs.
+Your mood logs, journal entries, and chat history are stored per account in a local SQLite database
+on this device (or your configured database in deployment). Sign in with email to access your data.
+No data is sent to external servers except anonymized prompts to the AI provider for generating
+insights and responses. Journal content is never written to logs.
 """
 
 CRISIS_MESSAGE = """

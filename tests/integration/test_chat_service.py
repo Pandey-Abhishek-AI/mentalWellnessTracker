@@ -34,3 +34,17 @@ def test_chat_enforces_turn_limit(chat_service, user_id):
     )
     assert result.message is None
     assert "limit" in (result.error or "").lower()
+
+
+def test_chat_enforces_daily_token_budget(chat_service, user_id, user_uuid, repo):
+    chat_service.settings.daily_chat_token_budget = 10
+    repo.save_chat_message(user_id, "user", "x" * 200, crisis_flagged=False)
+    result = chat_service.send_message(
+        user_id=user_id,
+        user_message="Another long stressed message about exams.",
+        session_turns=0,
+        session_history=[],
+    )
+    assert result.message is None
+    assert "token budget" in (result.error or "").lower()
+    assert user_uuid

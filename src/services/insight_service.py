@@ -3,13 +3,14 @@
 from dataclasses import dataclass
 from datetime import date
 
-from src.llm.client import GrokClient, LLMError, get_llm_client
+from app.config import get_settings
+from src.llm.client import LLMClient, LLMError, get_llm_client
 from src.llm.schemas import InsightPayload
 from src.models.insight import Insight
 from src.repositories.wellness_repository import WellnessRepository
 from src.safety import SafetyService
 from src.safety.crisis_detector import CrisisResult
-from src.utils.dates import days_ago, today
+from src.utils.dates import days_ago, start_of_today_utc, today
 
 
 @dataclass
@@ -29,7 +30,7 @@ class InsightService:
         self,
         repo: WellnessRepository,
         safety: SafetyService,
-        llm: GrokClient | None = None,
+        llm: LLMClient | None = None,
     ) -> None:
         self.repo = repo
         self.safety = safety
@@ -79,6 +80,29 @@ class InsightService:
             )
 
         user = self.repo.get_user(user_id)
+        if user is None or not user.user_uuid:
+            return InsightResult(
+                insight=None,
+                crisis=None,
+                cached=False,
+                error="User not found.",
+                entry_count=entry_count,
+            )
+
+        settings = get_settings()
+        insights_today = self.repo.count_insights_since(user_id, start_of_today_utc())
+        if insights_today >= settings.daily_insight_limit:
+            return InsightResult(
+                insight=None,
+                crisis=None,
+                cached=False,
+                error=(
+                    f"Daily insight limit ({settings.daily_insight_limit}) reached. "
+                    "Try again tomorrow."
+                ),
+                entry_count=entry_count,
+            )
+
         exam_type = user.exam_type if user else "NEET"
 
         try:

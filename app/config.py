@@ -14,16 +14,20 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    xai_api_key: str = ""
-    xai_model_chat: str = "grok-4.1-fast"
-    xai_model_insight: str = "grok-4.1-fast"
+    gemini_api_key: str = ""
+    gemini_model_chat: str = "gemini-2.0-flash"
+    gemini_model_insight: str = "gemini-2.0-flash"
     database_url: str = "sqlite:///./data/wellness.db"
     log_level: str = "INFO"
     min_journal_chars: int = 10
     max_journal_chars: int = 5000
     daily_chat_token_budget: int = 8000
+    daily_insight_limit: int = 5
+    daily_coping_limit: int = 10
     max_chat_turns: int = 5
     llm_timeout_seconds: int = 30
+    login_max_attempts: int = 5
+    login_lockout_minutes: int = 15
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     elevenlabs_model: str = "eleven_multilingual_v2"
@@ -50,7 +54,7 @@ class Settings(BaseSettings):
 
     @property
     def llm_enabled(self) -> bool:
-        return bool(self.xai_api_key.strip())
+        return bool(self.gemini_api_key.strip())
 
     @property
     def voice_available(self) -> bool:

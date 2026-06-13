@@ -1,6 +1,6 @@
 # Mental Wellness Tracker
 
-A Generative AI-powered mental wellness tracker for Indian students preparing for high-stakes exams (NEET, JEE, CUET, CAT, GATE, UPSC). Built with Python and Streamlit, powered by [xAI Grok](https://docs.x.ai/).
+A Generative AI-powered mental wellness tracker for Indian students preparing for high-stakes exams (NEET, JEE, CUET, CAT, GATE, UPSC). Built with Python and Streamlit, powered by [Google Gemini](https://ai.google.dev/).
 
 ## Important Safety Notice
 
@@ -16,6 +16,8 @@ If you are in crisis, contact:
 
 ## Features
 
+- Email login with a stable account UUID (derived from your email)
+- Per-account daily AI chat token limits, insight limits, and coping exercise limits
 - Daily mood check-in (mood, energy, sleep, tags)
 - Open-ended journaling with crisis detection
 - AI-powered wellness insights (stress triggers, patterns, themes)
@@ -28,7 +30,7 @@ If you are in crisis, contact:
 - **Frontend:** Streamlit
 - **Backend:** Python 3.10+
 - **Database:** SQLite (local) or PostgreSQL on [Supabase](https://supabase.com)
-- **LLM:** xAI Grok via OpenAI-compatible API
+- **LLM:** Google Gemini via Generative Language API
 - **Voice:** ElevenLabs TTS on chat responses
 - **Testing:** pytest, ruff, mypy
 
@@ -48,13 +50,11 @@ copy .env.example .env   # Windows
 # cp .env.example .env   # macOS/Linux
 ```
 
-Add your xAI API key to `.env`:
+Add your Gemini API key to `.env` (from [Google AI Studio](https://aistudio.google.com/apikey)):
 
 ```
-XAI_API_KEY=your_key_here
+GEMINI_API_KEY=your_key_here
 ```
-
-Get a key at [accounts.x.ai](https://accounts.x.ai). New accounts receive promotional API credits.
 
 ### Supabase PostgreSQL (optional)
 
@@ -90,11 +90,21 @@ On the Chat page, click **Listen** on any assistant reply to hear it aloud.
 streamlit run app/main.py
 ```
 
-Without `XAI_API_KEY`, mood/journal logging works; AI features use mock responses. Without `ELEVENLABS_API_KEY`, chat works but voice playback shows setup instructions.
+Create an account on first visit (email + password, min 8 characters). Your **UUID** is generated from your email and controls your daily chat token budget. Use **Log out** in the sidebar to switch accounts.
+
+Without `GEMINI_API_KEY`, mood/journal logging works; AI features use mock responses. Without `ELEVENLABS_API_KEY`, chat works but voice playback shows setup instructions.
+
+## Deploy (Streamlit Community Cloud)
+
+1. Push this repo to GitHub (never commit `.env`).
+2. Create an app at [share.streamlit.io](https://share.streamlit.io) with main file `app/main.py`.
+3. Paste secrets from `.streamlit/secrets.toml.example` into **Settings → Secrets**.
+4. Use `DATABASE_URL = "sqlite:///./data/wellness.db"` for SQLite (data may reset on redeploy).
 
 ## Testing
 
 ```bash
+pip install -r requirements-dev.txt
 pytest
 ruff check .
 ```
@@ -110,9 +120,13 @@ pip-audit -r requirements.txt
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `XAI_API_KEY` | — | xAI API key (required for live AI) |
-| `XAI_MODEL_CHAT` | `grok-4.1-fast` | Chat/coping model |
-| `XAI_MODEL_INSIGHT` | `grok-4.1-fast` | Insight model |
+| `GEMINI_API_KEY` | — | Google Gemini API key (required for live AI) |
+| `GEMINI_MODEL_CHAT` | `gemini-2.0-flash` | Chat/coping model |
+| `GEMINI_MODEL_INSIGHT` | `gemini-2.0-flash` | Insight model |
+| `DAILY_INSIGHT_LIMIT` | `5` | Max AI insights per account per day |
+| `DAILY_COPING_LIMIT` | `10` | Max coping exercises per account per day |
+| `LOGIN_MAX_ATTEMPTS` | `5` | Failed logins before lockout |
+| `LOGIN_LOCKOUT_MINUTES` | `15` | Login lockout window |
 | `DATABASE_URL` | `sqlite:///./data/wellness.db` | SQLite or Supabase PostgreSQL connection |
 | `ELEVENLABS_API_KEY` | — | ElevenLabs API key (chat TTS) |
 | `ELEVENLABS_VOICE_ID` | `21m00Tcm4TlvDq8ikWAM` | ElevenLabs voice ID |
@@ -138,7 +152,7 @@ pip-audit -r requirements.txt
 - Local single-user MVP; SQLite keeps data on your device (Supabase stores data in the cloud)
 - AI responses may be inaccurate; not medical advice
 - Streamlit has inherent accessibility constraints
-- Requires internet for live Grok and ElevenLabs API calls
+- Requires internet for live Gemini and ElevenLabs API calls
 - English-only UI in MVP
 
 ## Project Structure
@@ -158,4 +172,4 @@ docs/         PRD, technical design, tasks
 
 ## License
 
-Internal/educational use. Review xAI API terms before production deployment.
+Internal/educational use. Review Google Gemini API terms before production deployment.

@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from src.repositories.wellness_repository import WellnessRepository
 from src.safety import SafetyService
+from src.services.auth_service import AuthService
 from src.services.chat_service import ChatService
 from src.services.coping_service import CopingService
 from src.services.insight_service import InsightService
@@ -20,6 +21,11 @@ def get_repository() -> WellnessRepository:
 @lru_cache
 def get_safety() -> SafetyService:
     return SafetyService()
+
+
+@lru_cache
+def get_auth_service() -> AuthService:
+    return AuthService(get_repository())
 
 
 def get_mood_service() -> MoodService:
@@ -48,15 +54,15 @@ def get_voice_client_cached() -> VoiceClient:
 
 
 def ensure_session_state() -> int:
-    """Initialize Streamlit session state and return user_id."""
+    """Require login, initialize session state, and return user_id."""
     import streamlit as st
 
-    repo = get_repository()
-    user = repo.get_or_create_default_user()
+    from app.components.auth_panel import render_auth_gate, render_user_sidebar
+
+    render_auth_gate()
+    render_user_sidebar()
 
     defaults = {
-        "user_id": user.id,
-        "disclaimer_accepted": user.disclaimer_accepted_at is not None,
         "chat_turns": 0,
         "chat_messages": [],
     }
@@ -64,4 +70,4 @@ def ensure_session_state() -> int:
         if key not in st.session_state:
             st.session_state[key] = value
 
-    return st.session_state.user_id
+    return int(st.session_state.user_id)

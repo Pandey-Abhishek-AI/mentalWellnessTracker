@@ -13,7 +13,7 @@ def test_prompt_injection_does_not_bypass_crisis_check():
 
 
 def test_llm_error_does_not_expose_api_key(monkeypatch):
-    monkeypatch.setenv("XAI_API_KEY", "")
+    monkeypatch.setenv("GEMINI_API_KEY", "")
     from app.config import get_settings
 
     get_settings.cache_clear()

@@ -1,8 +1,11 @@
 """Input validation utilities."""
 
+import re
 from dataclasses import dataclass
 
 from app.config import get_settings
+
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class ValidationError(Exception):
@@ -37,3 +40,20 @@ def validate_journal(content: str) -> JournalValidation:
             f"(currently {length})."
         )
     return JournalValidation(content=stripped, char_count=length)
+
+
+def validate_email(email: str) -> str:
+    normalized = email.strip().lower()
+    if not normalized or not _EMAIL_PATTERN.match(normalized):
+        raise ValidationError("Enter a valid email address.")
+    if len(normalized) > 255:
+        raise ValidationError("Email address is too long.")
+    return normalized
+
+
+def validate_password(password: str) -> str:
+    if len(password) < 8:
+        raise ValidationError("Password must be at least 8 characters.")
+    if len(password) > 128:
+        raise ValidationError("Password is too long.")
+    return password

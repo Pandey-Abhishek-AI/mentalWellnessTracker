@@ -1,11 +1,13 @@
 """Streamlit main entry point with onboarding."""
 
+import runpy
 from pathlib import Path
 
-exec(  # noqa: S102
-    (Path(__file__).resolve().parent / "_bootstrap.py").read_text(encoding="utf-8"),
-    {"__file__": str(Path(__file__).resolve().parent / "_bootstrap.py")},
-)
+_caller = Path(__file__).resolve()
+_bootstrap = _caller.parent / "streamlit_bootstrap.py"
+if not _bootstrap.is_file():
+    _bootstrap = _caller.parent.parent / "streamlit_bootstrap.py"
+runpy.run_path(str(_bootstrap), init_globals={"_streamlit_caller": str(_caller)})
 
 import streamlit as st
 
@@ -83,12 +85,19 @@ st.markdown(
 repo = get_repository()
 user = repo.get_user(user_id)
 if user:
-    st.info(f"Preparing for: **{user.exam_type}**")
+    st.info(f"Signed in as **{user.email}** · Preparing for **{user.exam_type}**")
 
-if not settings.llm_enabled:
+if not settings.gemini_api_key.strip():
     st.warning(
-        "AI features use mock responses until you set `XAI_API_KEY` in your `.env` file. "
+        "AI features use mock responses until you set `GEMINI_API_KEY` from "
+        "[Google AI Studio](https://aistudio.google.com/apikey). "
         "Mood and journal logging still work offline."
+    )
+elif not settings.llm_enabled:
+    st.warning(
+        "Your `GEMINI_API_KEY` is missing or invalid. "
+        "Get a key from [Google AI Studio](https://aistudio.google.com/apikey). "
+        "Using mock AI responses."
     )
 
 st.markdown("---")

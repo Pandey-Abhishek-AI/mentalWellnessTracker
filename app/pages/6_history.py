@@ -1,12 +1,14 @@
 """History and data management page."""
 
+import runpy
 from datetime import date
 from pathlib import Path
 
-exec(  # noqa: S102
-    (Path(__file__).resolve().parent.parent / "_bootstrap.py").read_text(encoding="utf-8"),
-    {"__file__": str(Path(__file__).resolve().parent.parent / "_bootstrap.py")},
-)
+_caller = Path(__file__).resolve()
+_bootstrap = _caller.parent / "streamlit_bootstrap.py"
+if not _bootstrap.is_file():
+    _bootstrap = _caller.parent.parent / "streamlit_bootstrap.py"
+runpy.run_path(str(_bootstrap), init_globals={"_streamlit_caller": str(_caller)})
 
 import streamlit as st
 

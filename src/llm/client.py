@@ -1,70 +1,90 @@
-"""Grok LLM client adapter with mock support."""
+"""Google Gemini LLM client adapter with mock support."""
 
 import json
 import time
 from typing import Protocol
 
-from openai import OpenAI
+import httpx
 
 from app.config import get_settings
 from src.llm.prompts import COPING_PROMPT, INSIGHT_PROMPT, SYSTEM_PROMPT
 from src.llm.schemas import ChatTurn, InsightPayload
 from src.utils.logging import logger
 
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
 
 class LLMError(Exception):
     pass
 
 
-class GrokClient(Protocol):
+class LLMClient(Protocol):
     def generate_insight(self, context: str, exam_type: str) -> InsightPayload: ...
     def chat(self, messages: list[ChatTurn], context: str, exam_type: str) -> str: ...
     def generate_coping(self, exercise_type: str, context: str, exam_type: str) -> str: ...
 
 
-class OpenAIGrokClient:
-    """OpenAI-compatible client for xAI Grok API."""
+# Backward-compatible alias used across services/tests
+GrokClient = LLMClient
+
+
+class GeminiClient:
+    """Google Gemini via Generative Language API."""
 
     def __init__(self) -> None:
         settings = get_settings()
         if not settings.llm_enabled:
-            raise LLMError("XAI_API_KEY is not configured.")
+            raise LLMError("GEMINI_API_KEY is not configured.")
         self.settings = settings
-        self.client = OpenAI(
-            api_key=settings.xai_api_key,
-            base_url="https://api.x.ai/v1",
-            timeout=settings.llm_timeout_seconds,
-        )
 
-    def _call_with_retry(self, model: str, messages: list[dict], max_retries: int = 3) -> str:
+    def _call_with_retry(
+        self,
+        model: str,
+        system: str,
+        contents: list[dict],
+        max_retries: int = 3,
+    ) -> str:
+        payload: dict = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": contents,
+            "generationConfig": {"temperature": 0.7},
+        }
+
+        url = f"{GEMINI_API_BASE}/models/{model}:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.settings.gemini_api_key,
+        }
+
         last_error: Exception | None = None
         for attempt in range(max_retries):
             try:
-                response = self.client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=0.7,
-                )
-                content = response.choices[0].message.content
-                if not content:
-                    raise LLMError("Empty response from LLM")
-                return content.strip()
+                with httpx.Client(timeout=self.settings.llm_timeout_seconds) as client:
+                    response = client.post(url, headers=headers, json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+                candidates = data.get("candidates") or []
+                if not candidates:
+                    raise LLMError("Empty response from Gemini")
+                parts = candidates[0].get("content", {}).get("parts") or []
+                text = parts[0].get("text", "") if parts else ""
+                if not text.strip():
+                    raise LLMError("Empty response from Gemini")
+                return text.strip()
             except Exception as exc:
                 last_error = exc
-                logger.warning("LLM call failed (attempt %d): %s", attempt + 1, type(exc).__name__)
+                logger.warning(
+                    "Gemini call failed (attempt %d): %s", attempt + 1, type(exc).__name__
+                )
                 if attempt < max_retries - 1:
                     time.sleep(2**attempt)
-        raise LLMError(f"LLM request failed after {max_retries} attempts: {last_error}")
+        raise LLMError(f"Gemini request failed after {max_retries} attempts: {last_error}")
 
     def generate_insight(self, context: str, exam_type: str) -> InsightPayload:
         prompt = INSIGHT_PROMPT.format(exam_type=exam_type, context=context)
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ]
-        raw = self._call_with_retry(self.settings.xai_model_insight, messages)
+        contents = [{"role": "user", "parts": [{"text": prompt}]}]
+        raw = self._call_with_retry(self.settings.gemini_model_insight, SYSTEM_PROMPT, contents)
         try:
-            # Extract JSON from response (handle markdown code blocks)
             json_str = raw
             if "```" in raw:
                 json_str = raw.split("```")[1]
@@ -78,21 +98,29 @@ class OpenAIGrokClient:
     def chat(self, messages: list[ChatTurn], context: str, exam_type: str) -> str:
         from src.llm.prompts import wrap_user_content
 
-        api_messages: list[dict] = [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT + f"\nStudent is preparing for: {exam_type}.",
-            },
-        ]
+        system = SYSTEM_PROMPT + f"\nStudent is preparing for: {exam_type}."
         if context:
-            api_messages.append({
-                "role": "system",
-                "content": f"Recent wellness context:\n{wrap_user_content(context)}",
-            })
-        for m in messages:
-            content = wrap_user_content(m.content) if m.role == "user" else m.content
-            api_messages.append({"role": m.role, "content": content})
-        return self._call_with_retry(self.settings.xai_model_chat, api_messages)
+            system += f"\nRecent wellness context:\n{wrap_user_content(context)}"
+
+        normalized = [
+            ChatTurn(
+                role=m.role,
+                content=wrap_user_content(m.content) if m.role == "user" else m.content,
+            )
+            for m in messages
+        ]
+        contents = [
+            {
+                "role": "user" if turn.role == "user" else "model",
+                "parts": [{"text": turn.content}],
+            }
+            for turn in normalized
+        ]
+        return self._call_with_retry(
+            self.settings.gemini_model_chat,
+            system,
+            contents,
+        )
 
     def generate_coping(self, exercise_type: str, context: str, exam_type: str) -> str:
         prompt = COPING_PROMPT.format(
@@ -100,14 +128,11 @@ class OpenAIGrokClient:
             exam_type=exam_type,
             context=context or "General exam preparation stress.",
         )
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ]
-        return self._call_with_retry(self.settings.xai_model_chat, messages)
+        contents = [{"role": "user", "parts": [{"text": prompt}]}]
+        return self._call_with_retry(self.settings.gemini_model_chat, SYSTEM_PROMPT, contents)
 
 
-class MockGrokClient:
+class MockLLMClient:
     """Mock client for testing without API calls."""
 
     def generate_insight(self, context: str, exam_type: str) -> InsightPayload:
@@ -135,10 +160,14 @@ class MockGrokClient:
         )
 
 
-def get_llm_client(use_mock: bool = False) -> GrokClient:
+MockGrokClient = MockLLMClient
+OpenAIGrokClient = GeminiClient  # legacy test import name
+
+
+def get_llm_client(use_mock: bool = False) -> LLMClient:
     if use_mock:
-        return MockGrokClient()
+        return MockLLMClient()
     settings = get_settings()
     if not settings.llm_enabled:
-        return MockGrokClient()
-    return OpenAIGrokClient()
+        return MockLLMClient()
+    return GeminiClient()

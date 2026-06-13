@@ -3,13 +3,14 @@
 from dataclasses import dataclass
 
 from app.config import get_settings
-from src.llm.client import GrokClient, LLMError, get_llm_client
+from src.llm.client import LLMClient, LLMError, get_llm_client
 from src.llm.schemas import ChatTurn
 from src.models.chat import ChatMessage
 from src.repositories.wellness_repository import WellnessRepository
 from src.safety import SafetyService
 from src.safety.crisis_detector import CrisisResult
-from src.utils.dates import days_ago
+from src.utils.dates import days_ago, start_of_today_utc
+from src.utils.tokens import estimate_tokens
 
 
 @dataclass
@@ -25,7 +26,7 @@ class ChatService:
         self,
         repo: WellnessRepository,
         safety: SafetyService,
-        llm: GrokClient | None = None,
+        llm: LLMClient | None = None,
     ) -> None:
         self.repo = repo
         self.safety = safety
@@ -62,6 +63,30 @@ class ChatService:
                 turns_remaining=0,
             )
 
+        budget = self.settings.daily_chat_token_budget
+        user = self.repo.get_user(user_id)
+        user_uuid = user.user_uuid if user else None
+        if not user_uuid:
+            return ChatResult(
+                message=None,
+                crisis=None,
+                error="Account UUID missing. Please log out and sign in again.",
+                turns_remaining=turns_remaining,
+            )
+
+        used_today = self.repo.estimate_chat_tokens_since_uuid(user_uuid, start_of_today_utc())
+        reserved = estimate_tokens(user_message) + 400
+        if used_today + reserved > budget:
+            return ChatResult(
+                message=None,
+                crisis=None,
+                error=(
+                    f"Daily chat token budget reached for your account "
+                    f"({budget} estimated tokens). Try again tomorrow UTC."
+                ),
+                turns_remaining=turns_remaining,
+            )
+
         crisis = self.safety.check_text(user_message)
         self.repo.save_chat_message(
             user_id, "user", user_message, crisis_flagged=crisis.is_crisis
@@ -75,7 +100,6 @@ class ChatService:
                 turns_remaining=turns_remaining,
             )
 
-        user = self.repo.get_user(user_id)
         exam_type = user.exam_type if user else "NEET"
         context = self._build_context(user_id)
 

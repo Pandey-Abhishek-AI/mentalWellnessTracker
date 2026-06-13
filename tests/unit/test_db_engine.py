@@ -21,6 +21,7 @@ def test_create_db_engine_sqlite_uses_check_same_thread():
 
 
 def test_create_db_engine_postgres_uses_pool_pre_ping():
+    pytest.importorskip("psycopg")
     engine = create_db_engine("postgresql+psycopg://user:pass@localhost/test")
     try:
         assert engine.url.drivername == "postgresql+psycopg"

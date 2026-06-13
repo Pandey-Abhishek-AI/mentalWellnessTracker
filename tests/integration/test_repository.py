@@ -5,10 +5,14 @@ from datetime import date
 from src.repositories.wellness_repository import WellnessRepository
 
 
-def test_get_or_create_default_user():
-    repo = WellnessRepository("sqlite:///:memory:")
-    user = repo.get_or_create_default_user()
-    assert user.id == 1
+def test_create_user(repo: WellnessRepository):
+    user = repo.create_user(
+        email="solo@example.com",
+        user_uuid="00000000-0000-4000-8000-000000000001",
+        password_hash="hash",
+        password_salt="salt",
+    )
+    assert user.email == "solo@example.com"
 
 
 def test_upsert_mood_entry(repo: WellnessRepository, user_id: int):
